@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Predictive Edge Caching — Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0b0e14;
+      --surface: #131820;
+      --surface2: #1a2030;
+      --border: #232d3f;
+      --text: #e0e6f0;
+      --text-dim: #7a8ba8;
+      --accent: #6ee7b7;
+      --accent2: #38bdf8;
+      --red: #f87171;
+      --orange: #fbbf24;
+      --purple: #a78bfa;
+      --green: #4ade80;
+      --blue: #60a5fa;
+      --ml-color: #6ee7b7;
+      --lru-color: #60a5fa;
+      --lfu-color: #f87171;
+      --fifo-color: #7a8ba8;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Header ─────────────────────────────────────────── */
+    .header {
+      background: linear-gradient(135deg, #0f1923 0%, #162032 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 1.5rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1.2rem;
+    }
+    .header-icon {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem;
+    }
+    .header h1 {
+      font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em;
+    }
+    .header p {
+      font-size: 0.82rem; color: var(--text-dim); margin-top: 2px;
+    }
+    .header-badge {
+      margin-left: auto;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.35rem 1rem;
+      font-size: 0.75rem;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* ── Layout ─────────────────────────────────────────── */
+    .container { max-width: 1360px; margin: 0 auto; padding: 1.5rem; }
+
+    /* ── KPI Cards ──────────────────────────────────────── */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .kpi {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.2rem 1.4rem;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .kpi:hover { transform: translateY(-2px); border-color: var(--accent); }
+    .kpi::after {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      border-radius: 14px 14px 0 0;
+    }
+    .kpi:nth-child(1)::after { background: var(--ml-color); }
+    .kpi:nth-child(2)::after { background: var(--lru-color); }
+    .kpi:nth-child(3)::after { background: var(--lfu-color); }
+    .kpi:nth-child(4)::after { background: var(--fifo-color); }
+    .kpi-label { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+    .kpi-value { font-size: 2rem; font-weight: 800; margin: 0.3rem 0 0.15rem; letter-spacing: -0.03em; }
+    .kpi:nth-child(1) .kpi-value { color: var(--ml-color); }
+    .kpi:nth-child(2) .kpi-value { color: var(--lru-color); }
+    .kpi:nth-child(3) .kpi-value { color: var(--lfu-color); }
+    .kpi:nth-child(4) .kpi-value { color: var(--fifo-color); }
+    .kpi-sub { font-size: 0.78rem; color: var(--text-dim); }
+    .kpi-sub span { font-weight: 600; }
+
+    /* ── Cards / Chart panels ──────────────────────────── */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.3rem 1.5rem;
+    }
+    .card-title {
+      font-size: 0.82rem; font-weight: 600; color: var(--text-dim);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      margin-bottom: 1rem;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .card-title .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      display: inline-block;
+    }
+    .chart-wrap { position: relative; width: 100%; height: 280px; }
+
+    /* ── Table ──────────────────────────────────────────── */
+    .full-card { grid-column: 1 / -1; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    th { text-align: left; padding: 0.7rem 1rem; color: var(--text-dim); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); }
+    td { padding: 0.7rem 1rem; border-bottom: 1px solid #1a2030; }
+    tr:hover td { background: var(--surface2); }
+    .winner { color: var(--accent); font-weight: 700; }
+    .policy-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 0.5rem; vertical-align: middle; }
+
+    /* ── File picker ────────────────────────────────────── */
+    .controls {
+      display: flex; align-items: center; gap: 1rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+    .file-btn {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #0b0e14;
+      border: none;
+      border-radius: 10px;
+      padding: 0.65rem 1.5rem;
+      font-size: 0.88rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.15s;
+    }
+    .file-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .controls span { color: var(--text-dim); font-size: 0.82rem; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .status-dot.ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .status-dot.wait { background: var(--orange); }
+
+    /* ── Responsive ─────────────────────────────────────── */
+    @media (max-width: 900px) {
+      .kpi-row { grid-template-columns: repeat(2, 1fr); }
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 560px) {
+      .kpi-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">⚡</div>
+  <div>
+    <h1>Predictive Edge Caching</h1>
+    <p>XGBoost-Driven Cache Replacement — CSE 476/575</p>
+  </div>
+  <div class="header-badge">● Simulation Dashboard</div>
+</div>
+
+<div class="container">
+  <!-- File Picker -->
+  <div class="controls">
+    <button class="file-btn" onclick="document.getElementById('csvInput').click()">
+      📂 Load Results (select 4 CSVs)
+    </button>
+    <input type="file" id="csvInput" accept=".csv" multiple style="display:none" />
+    <span id="statusText">
+      <span class="status-dot wait"></span> Select lru.csv, lfu.csv, fifo.csv, ml_driven.csv from results/
+    </span>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="kpi-row">
+    <div class="kpi">
+      <div class="kpi-label">ML-Driven Hit Rate</div>
+      <div class="kpi-value" id="kpi-ml">—</div>
+      <div class="kpi-sub">Hits: <span id="kpi-ml-hits">—</span> · Misses: <span id="kpi-ml-misses">—</span></div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">LRU Hit Rate</div>
+      <div class="kpi-value" id="kpi-lru">—</div>
+      <div class="kpi-sub">Hits: <span id="kpi-lru-hits">—</span> · Misses: <span id="kpi-lru-misses">—</span></div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">LFU Hit Rate</div>
+      <div class="kpi-value" id="kpi-lfu">—</div>
+      <div class="kpi-sub">Hits: <span id="kpi-lfu-hits">—</span> · Misses: <span id="kpi-lfu-misses">—</span></div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">FIFO Hit Rate</div>
+      <div class="kpi-value" id="kpi-fifo">—</div>
+      <div class="kpi-sub">Hits: <span id="kpi-fifo-hits">—</span> · Misses: <span id="kpi-fifo-misses">—</span></div>
+    </div>
+  </div>
+
+  <!-- Charts Row 1 -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--accent)"></span> Hit Rate Over Time</div>
+      <div class="chart-wrap"><canvas id="chartHitRate"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--accent2)"></span> Final Hit Rate Comparison</div>
+      <div class="chart-wrap"><canvas id="chartBar"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Charts Row 2 -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--purple)"></span> Cache Utilisation Over Time</div>
+      <div class="chart-wrap"><canvas id="chartUtil"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--orange)"></span> ML Model Training Progress</div>
+      <div class="chart-wrap"><canvas id="chartML"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Detailed Table -->
+  <div class="grid-2">
+    <div class="card full-card">
+      <div class="card-title"><span class="dot" style="background:var(--green)"></span> Detailed Performance Comparison</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Policy</th><th>Total Requests</th><th>Hits</th><th>Misses</th>
+            <th>Hit Rate</th><th>Miss Rate</th><th>vs LRU</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <tr><td colspan="7" style="color:var(--text-dim); text-align:center; padding:2rem">Load CSV results to see data</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const COLORS = {
+  'ML-Driven': '#6ee7b7',
+  'LRU':       '#60a5fa',
+  'LFU':       '#f87171',
+  'FIFO':      '#7a8ba8',
+};
+const ORDER = ['ML-Driven', 'LRU', 'LFU', 'FIFO'];
+
+let charts = {};
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n').filter(l => !l.startsWith('#'));
+  const header = lines[0].replace(/\r/g, '').split(',');
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const vals = lines[i].replace(/\r/g, '').split(',');
+    const obj = {};
+    header.forEach((h, j) => obj[h.trim()] = parseFloat(vals[j]));
+    rows.push(obj);
+  }
+  return rows;
+}
+
+function nameFromFile(filename) {
+  const map = { 'lru': 'LRU', 'lfu': 'LFU', 'fifo': 'FIFO', 'ml_driven': 'ML-Driven' };
+  const stem = filename.replace('.csv', '').toLowerCase();
+  return map[stem] || stem;
+}
+
+function subsample(arr, maxPoints) {
+  if (arr.length <= maxPoints) return arr;
+  const step = Math.floor(arr.length / maxPoints);
+  return arr.filter((_, i) => i % step === 0);
+}
+
+function renderAll(data) {
+  // Destroy previous charts
+  Object.values(charts).forEach(c => c.destroy());
+  charts = {};
+
+  const chartOpts = {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: '#7a8ba8', font: { family: 'Inter', size: 11 } } } },
+    scales: {
+      x: { ticks: { color: '#555e70', font: { size: 10 } }, grid: { color: '#1a2030' } },
+      y: { ticks: { color: '#555e70', font: { size: 10 } }, grid: { color: '#1a2030' } },
+    },
+  };
+
+  // ── KPI Cards ──
+  ORDER.forEach(name => {
+    const key = name.toLowerCase().replace('-', '');
+    const d = data[name]; if (!d) return;
+    const last = d[d.length - 1];
+    const hits = Math.round(last.cumulative_hits);
+    const misses = Math.round(last.cumulative_misses);
+    const rate = (last.cumulative_hit_rate * 100).toFixed(2);
+    const el = key === 'mldriven' ? 'ml' : key;
+    document.getElementById('kpi-' + el).textContent = rate + '%';
+    document.getElementById('kpi-' + el + '-hits').textContent = hits.toLocaleString();
+    document.getElementById('kpi-' + el + '-misses').textContent = misses.toLocaleString();
+  });
+
+  // ── Hit Rate Over Time ──
+  const hrDatasets = ORDER.filter(n => data[n]).map(name => {
+    const sub = subsample(data[name], 500);
+    return {
+      label: name,
+      data: sub.map(r => ({ x: r.request_idx, y: r.windowed_hit_rate * 100 })),
+      borderColor: COLORS[name], backgroundColor: COLORS[name] + '18',
+      borderWidth: 1.8, pointRadius: 0, tension: 0.3, fill: name === 'ML-Driven',
+    };
+  });
+  charts.hr = new Chart(document.getElementById('chartHitRate'), {
+    type: 'line', data: { datasets: hrDatasets },
+    options: { ...chartOpts, scales: { ...chartOpts.scales, x: { ...chartOpts.scales.x, type: 'linear', title: { display: true, text: 'Request Index', color: '#555e70' } }, y: { ...chartOpts.scales.y, title: { display: true, text: 'Hit Rate (%)', color: '#555e70' }, min: 0 } } },
+  });
+
+  // ── Bar Chart ──
+  const barLabels = ORDER.filter(n => data[n]);
+  const barValues = barLabels.map(n => { const l = data[n][data[n].length-1]; return (l.cumulative_hit_rate * 100); });
+  charts.bar = new Chart(document.getElementById('chartBar'), {
+    type: 'bar',
+    data: { labels: barLabels, datasets: [{ data: barValues, backgroundColor: barLabels.map(n => COLORS[n] + 'cc'), borderColor: barLabels.map(n => COLORS[n]), borderWidth: 2, borderRadius: 8, barPercentage: 0.6 }] },
+    options: { ...chartOpts, plugins: { ...chartOpts.plugins, legend: { display: false } }, scales: { ...chartOpts.scales, y: { ...chartOpts.scales.y, title: { display: true, text: 'Hit Rate (%)', color: '#555e70' }, min: 0 } } },
+  });
+
+  // ── Cache Utilisation ──
+  const utilDatasets = ORDER.filter(n => data[n]).map(name => {
+    const sub = subsample(data[name], 500);
+    return {
+      label: name,
+      data: sub.map(r => ({ x: r.request_idx, y: r.cache_utilisation * 100 })),
+      borderColor: COLORS[name], borderWidth: 1.5, pointRadius: 0, tension: 0.3,
+    };
+  });
+  charts.util = new Chart(document.getElementById('chartUtil'), {
+    type: 'line', data: { datasets: utilDatasets },
+    options: { ...chartOpts, scales: { ...chartOpts.scales, x: { ...chartOpts.scales.x, type: 'linear', title: { display: true, text: 'Request Index', color: '#555e70' } }, y: { ...chartOpts.scales.y, title: { display: true, text: 'Utilisation (%)', color: '#555e70' }, min: 0, max: 105 } } },
+  });
+
+  // ── ML Training Steps ──
+  const mlData = data['ML-Driven'];
+  if (mlData && mlData[0].ml_training_steps !== undefined) {
+    const sub = subsample(mlData, 500);
+    charts.ml = new Chart(document.getElementById('chartML'), {
+      type: 'line',
+      data: { datasets: [{ label: 'Training Steps', data: sub.map(r => ({ x: r.request_idx, y: r.ml_training_steps })), borderColor: '#6ee7b7', backgroundColor: '#6ee7b718', borderWidth: 2, pointRadius: 0, tension: 0.3, fill: true }] },
+      options: { ...chartOpts, scales: { ...chartOpts.scales, x: { ...chartOpts.scales.x, type: 'linear', title: { display: true, text: 'Request Index', color: '#555e70' } }, y: { ...chartOpts.scales.y, title: { display: true, text: 'Cumulative Steps', color: '#555e70' } } } },
+    });
+  }
+
+  // ── Table ──
+  const tbody = document.getElementById('tableBody');
+  let lruRate = 0;
+  if (data['LRU']) { const l = data['LRU'][data['LRU'].length-1]; lruRate = l.cumulative_hit_rate; }
+  let best = 0;
+  ORDER.forEach(n => { if (data[n]) { const l = data[n][data[n].length-1]; if (l.cumulative_hit_rate > best) best = l.cumulative_hit_rate; } });
+
+  tbody.innerHTML = ORDER.filter(n => data[n]).map(name => {
+    const last = data[name][data[name].length - 1];
+    const hits = Math.round(last.cumulative_hits);
+    const misses = Math.round(last.cumulative_misses);
+    const total = hits + misses;
+    const hr = last.cumulative_hit_rate;
+    const mr = 1 - hr;
+    const vsLru = lruRate > 0 ? ((hr - lruRate) / lruRate * 100) : 0;
+    const isBest = Math.abs(hr - best) < 0.0001;
+    const cls = isBest ? ' class="winner"' : '';
+    const vsStr = name === 'LRU' ? '—' : (vsLru >= 0 ? '+' : '') + vsLru.toFixed(1) + '%';
+    return `<tr>
+      <td><span class="policy-dot" style="background:${COLORS[name]}"></span>${name}</td>
+      <td>${total.toLocaleString()}</td>
+      <td${cls}>${hits.toLocaleString()}</td>
+      <td>${misses.toLocaleString()}</td>
+      <td${cls}>${(hr*100).toFixed(2)}%</td>
+      <td>${(mr*100).toFixed(2)}%</td>
+      <td style="color:${vsLru > 0 ? 'var(--green)' : vsLru < 0 ? 'var(--red)' : 'var(--text-dim)'}">${vsStr}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── File input handler ──
+document.getElementById('csvInput').addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files);
+  if (files.length === 0) return;
+
+  const data = {};
+  for (const f of files) {
+    const text = await f.text();
+    const name = nameFromFile(f.name);
+    data[name] = parseCSV(text);
+  }
+
+  document.getElementById('statusText').innerHTML =
+    '<span class="status-dot ok"></span> Loaded ' + files.length + ' files — ' +
+    Object.keys(data).join(', ');
+
+  renderAll(data);
+});
+</script>
+</body>
+</html>
