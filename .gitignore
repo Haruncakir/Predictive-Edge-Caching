@@ -68,5 +68,8 @@ vcpkg_installed/
 Testing/
 .cache/
 
+cache/
+*.pyc
+
 results/
 *.png
