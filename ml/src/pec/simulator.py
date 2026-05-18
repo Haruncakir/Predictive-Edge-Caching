@@ -11,7 +11,9 @@ scratch so results are directly comparable.
 from __future__ import annotations
 
 import logging
+import threading
 from collections import deque
+from collections.abc import Callable
 from pathlib import Path
 
 import pandas as pd
@@ -89,6 +91,8 @@ def run_single_policy(
     requests: list[Request],
     policy_name: str,
     cfg: SimulationConfig,
+    stop_event: threading.Event | None = None,
+    progress_callback: Callable[[str, int, int], None] | None = None,
 ) -> MetricsReporter:
     """Run the full simulation for a single replacement policy.
 
@@ -116,6 +120,10 @@ def run_single_policy(
     log_interval = max(total // 20, 1)
 
     for idx, req in enumerate(requests):
+        if stop_event is not None and stop_event.is_set():
+            break
+        if progress_callback is not None and idx % 500 == 0:
+            progress_callback(policy.name, idx, total)
         history.append(req)
         recent_file_ids.add(req.file_id)
         recent_window.append(req.file_id)
@@ -174,7 +182,11 @@ def run_single_policy(
     return reporter
 
 
-def run_comparison(cfg: SimulationConfig) -> dict[str, MetricsReporter]:
+def run_comparison(
+    cfg: SimulationConfig,
+    stop_event: threading.Event | None = None,
+    progress_callback: Callable[[str, int, int], None] | None = None,
+) -> dict[str, MetricsReporter]:
     """Run the simulation for every policy in the comparison set.
 
     Returns a dict mapping policy name → MetricsReporter.
@@ -183,10 +195,14 @@ def run_comparison(cfg: SimulationConfig) -> dict[str, MetricsReporter]:
     results: dict[str, MetricsReporter] = {}
 
     for policy_name in cfg.policies_to_compare:
+        if stop_event is not None and stop_event.is_set():
+            break
         logger.info("━" * 60)
         logger.info("Running policy: %s", policy_name)
         logger.info("━" * 60)
-        reporter = run_single_policy(requests, policy_name, cfg)
+        reporter = run_single_policy(
+            requests, policy_name, cfg, stop_event, progress_callback
+        )
         results[reporter.policy_name] = reporter
 
     return results
