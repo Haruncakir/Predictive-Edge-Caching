@@ -76,6 +76,7 @@ class MLPredictor:
         self._train_X: list[list[float]] = []
         self._train_y: list[int] = []
         self._training_steps: int = 0
+        self._last_trained_samples: int = 0
 
         # Pending predictions awaiting labels.
         self._pending: list[_PendingPrediction] = []
@@ -175,11 +176,13 @@ class MLPredictor:
         self._pending = still_pending
 
         # Retrain periodically once we have enough labelled samples.
-        if (
-            len(self._train_y) >= self.cfg.min_training_samples
-            and len(self._train_y) % self.cfg.retrain_interval
-            < self.cfg.retrain_interval // 2
-        ):
+        sample_count = len(self._train_y)
+        if sample_count < self.cfg.min_training_samples:
+            return
+
+        # Train only when we have accumulated a full new interval of labels.
+        # This prevents expensive repeated retrains over nearly identical data.
+        if sample_count - self._last_trained_samples >= self.cfg.retrain_interval:
             self._train()
 
     def force_train(self) -> None:
@@ -225,6 +228,7 @@ class MLPredictor:
             verbose_eval=False,
         )
         self._training_steps += 1
+        self._last_trained_samples = len(self._train_y)
         logger.debug(
             "Trained step %d on %d samples (pos_rate=%.3f)",
             self._training_steps,

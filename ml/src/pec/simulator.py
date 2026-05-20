@@ -28,6 +28,7 @@ from .cache.policies import (
 )
 from .cache.store import CacheStore
 from .config import SimulationConfig
+from .feature_extractor import FeatureExtractor
 from .metrics import MetricsReporter
 from .model import MLPredictor
 from .types import CacheOutcome, Request
@@ -111,6 +112,7 @@ def run_single_policy(
 
     # Sliding history window (like the C++ HistoryBuffer).
     history: deque[Request] = deque(maxlen=cfg.history_window)
+    extractor = FeatureExtractor()
 
     # Track recently-seen file IDs for ML label generation.
     recent_file_ids: set[int] = set()
@@ -138,9 +140,6 @@ def run_single_policy(
 
             # Record features for future labelling.
             if store.count > 0 and idx % cfg.ml.retrain_interval == 0:
-                from .feature_extractor import FeatureExtractor
-
-                extractor = FeatureExtractor()
                 features = extractor.extract(
                     list(history), store.file_ids, req.arrival_ns
                 )

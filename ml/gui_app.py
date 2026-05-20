@@ -1,6 +1,8 @@
-"""Predictive Edge Caching — Tkinter GUI Dashboard.
+"""Predictive Edge Caching - Tkinter GUI Dashboard.
 
 Run:  cd ml/ && uv run python gui_app.py
+
+Default settings match README.md (regime trace benchmark).
 """
 from __future__ import annotations
 import logging, os, queue, sys, threading
@@ -35,6 +37,10 @@ from pec.simulator import run_comparison
 from pec.metrics import MetricsReporter
 
 DATA_DIR = Path(__file__).parent.parent / "data"
+# Match README.md: pec-simulate --trace ../data/regime_trace.csv --cache-mb 25 --history-window 512
+DEFAULT_TRACE = "regime_trace.csv"
+DEFAULT_CACHE_MB = 25
+DEFAULT_HISTORY_WINDOW = 512
 COLORS = {"ML-Driven": "#6ee7b7", "LRU": "#60a5fa", "LFU": "#f87171", "FIFO": "#7a8ba8"}
 BG = "#0b0e14"; SURFACE = "#131820"; SURFACE2 = "#1a2030"; BORDER = "#232d3f"
 TEXT = "#e0e6f0"; DIM = "#7a8ba8"; ACCENT = "#6ee7b7"; ACCENT2 = "#38bdf8"
@@ -46,10 +52,11 @@ class QueueHandler(logging.Handler):
 class PECDashboard:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Predictive Edge Caching — Dashboard")
-        self.root.geometry("1400x900")
+        self.root.title("Predictive Edge Caching - Dashboard")
+        self.root.geometry("1680x1020")
         self.root.configure(bg=BG)
-        self.root.minsize(1000, 700)
+        self.root.minsize(1280, 820)
+        self.ui_scale = 1.25
         self.stop_event = threading.Event()
         self.log_queue: queue.Queue[str] = queue.Queue()
         self.results: dict[str, MetricsReporter] = {}
@@ -67,33 +74,35 @@ class PECDashboard:
     def _build_styles(self):
         s = ttk.Style()
         s.theme_use("clam")
+        self.root.tk.call("tk", "scaling", self.ui_scale)
         s.configure(".", background=BG, foreground=TEXT, fieldbackground=SURFACE, borderwidth=0)
         s.configure("TFrame", background=BG)
-        s.configure("TLabel", background=BG, foreground=TEXT, font=("Segoe UI", 10))
-        s.configure("TLabelframe", background=BG, foreground=ACCENT, font=("Segoe UI", 10, "bold"))
+        s.configure("TLabel", background=BG, foreground=TEXT, font=("Segoe UI", 12))
+        s.configure("TLabelframe", background=BG, foreground=ACCENT, font=("Segoe UI", 12, "bold"))
         s.configure("TLabelframe.Label", background=BG, foreground=ACCENT)
-        s.configure("TButton", background=SURFACE2, foreground=TEXT, font=("Segoe UI", 10, "bold"), padding=6)
+        s.configure("TButton", background=SURFACE2, foreground=TEXT, font=("Segoe UI", 12, "bold"), padding=8)
         s.map("TButton", background=[("active", BORDER)])
         s.configure("Run.TButton", background="#1a3a2a", foreground=ACCENT)
         s.configure("Stop.TButton", background="#3a1a1a", foreground="#f87171")
-        s.configure("TCheckbutton", background=BG, foreground=TEXT, font=("Segoe UI", 10))
+        s.configure("TCheckbutton", background=BG, foreground=TEXT, font=("Segoe UI", 11))
         s.configure("Horizontal.TProgressbar", background=ACCENT, troughcolor=SURFACE2)
         s.configure("Treeview", background=SURFACE, foreground=TEXT, fieldbackground=SURFACE,
-                     rowheight=28, font=("Segoe UI", 10))
+                     rowheight=34, font=("Segoe UI", 11))
         s.configure("Treeview.Heading", background=SURFACE2, foreground=ACCENT,
-                     font=("Segoe UI", 10, "bold"))
+                     font=("Segoe UI", 11, "bold"))
         s.map("Treeview", background=[("selected", BORDER)])
-        s.configure("KPI.TLabel", font=("Segoe UI", 22, "bold"))
-        s.configure("KPISub.TLabel", font=("Segoe UI", 9), foreground=DIM)
-        s.configure("KPITitle.TLabel", font=("Segoe UI", 8, "bold"), foreground=DIM)
-        s.configure("Header.TLabel", font=("Segoe UI", 14, "bold"), foreground=ACCENT)
+        s.configure("KPI.TLabel", font=("Segoe UI", 28, "bold"))
+        s.configure("KPISub.TLabel", font=("Segoe UI", 11), foreground=DIM)
+        s.configure("KPITitle.TLabel", font=("Segoe UI", 10, "bold"), foreground=DIM)
+        s.configure("Header.TLabel", font=("Segoe UI", 18, "bold"), foreground=ACCENT)
         s.configure("TScale", background=BG, troughcolor=SURFACE2)
 
     def _build_ui(self):
         # Header
         hdr = ttk.Frame(self.root); hdr.pack(fill="x", padx=12, pady=(10,0))
-        ttk.Label(hdr, text="\u26a1 Predictive Edge Caching", style="Header.TLabel").pack(side="left")
-        self.status_lbl = ttk.Label(hdr, text="\u25cf Idle", foreground=DIM); self.status_lbl.pack(side="right")
+        ttk.Label(hdr, text="Predictive Edge Caching", style="Header.TLabel").pack(side="left")
+        self.status_lbl = ttk.Label(hdr, text="* Idle", foreground=DIM)
+        self.status_lbl.pack(side="right")
 
         # Top pane: config + architecture
         top = ttk.Frame(self.root); top.pack(fill="x", padx=12, pady=8)
@@ -107,9 +116,9 @@ class PECDashboard:
             f = tk.Frame(self.kpi_frame, bg=SURFACE, highlightbackground=COLORS[pol], highlightthickness=2, padx=14, pady=8)
             f.pack(side="left", fill="x", expand=True, padx=4)
             ttk.Label(f, text=pol, style="KPITitle.TLabel", background=SURFACE).pack(anchor="w")
-            v = ttk.Label(f, text="—", style="KPI.TLabel", foreground=COLORS[pol], background=SURFACE)
+            v = ttk.Label(f, text="--", style="KPI.TLabel", foreground=COLORS[pol], background=SURFACE)
             v.pack(anchor="w")
-            sub = ttk.Label(f, text="Hits: — · Misses: —", style="KPISub.TLabel", background=SURFACE)
+            sub = ttk.Label(f, text="Hits: -- | Misses: --", style="KPISub.TLabel", background=SURFACE)
             sub.pack(anchor="w")
             self.kpi_labels[pol] = (v, sub)
 
@@ -128,13 +137,14 @@ class PECDashboard:
         ttk.Label(cf, text="Trace File:").pack(anchor="w")
         tf = ttk.Frame(cf); tf.pack(fill="x", pady=(0,6))
         traces = sorted([f.name for f in DATA_DIR.glob("*.csv")]) if DATA_DIR.exists() else []
-        self.trace_var = tk.StringVar(value=traces[0] if traces else "generated_trace.csv")
+        preferred = DEFAULT_TRACE if DEFAULT_TRACE in traces else (traces[0] if traces else DEFAULT_TRACE)
+        self.trace_var = tk.StringVar(value=preferred)
         cb = ttk.Combobox(tf, textvariable=self.trace_var, values=traces, width=20); cb.pack(side="left", fill="x", expand=True)
         ttk.Button(tf, text="...", width=3, command=self._browse_trace).pack(side="right", padx=(4,0))
         # Sliders
-        self.cache_var = tk.IntVar(value=100)
+        self.cache_var = tk.IntVar(value=DEFAULT_CACHE_MB)
         self._add_slider(cf, "Cache (MB):", self.cache_var, 10, 500)
-        self.hist_var = tk.IntVar(value=256)
+        self.hist_var = tk.IntVar(value=DEFAULT_HISTORY_WINDOW)
         self._add_slider(cf, "History Window:", self.hist_var, 64, 1024)
         self.retrain_var = tk.IntVar(value=256)
         self._add_slider(cf, "Retrain Interval:", self.retrain_var, 64, 1024)
@@ -148,11 +158,11 @@ class PECDashboard:
             ttk.Checkbutton(cf, text=p.upper().replace("_","-"), variable=v).pack(anchor="w")
         # Buttons
         bf = ttk.Frame(cf); bf.pack(fill="x", pady=(10,0))
-        self.run_btn = ttk.Button(bf, text="\u25b6 Run", style="Run.TButton", command=self._run)
+        self.run_btn = ttk.Button(bf, text="Run", style="Run.TButton", command=self._run)
         self.run_btn.pack(fill="x", pady=2)
-        self.stop_btn = ttk.Button(bf, text="\u25a0 Stop", style="Stop.TButton", command=self._stop, state="disabled")
+        self.stop_btn = ttk.Button(bf, text="Stop", style="Stop.TButton", command=self._stop, state="disabled")
         self.stop_btn.pack(fill="x", pady=2)
-        ttk.Button(bf, text="\u21ba Reset", command=self._reset).pack(fill="x", pady=2)
+        ttk.Button(bf, text="Reset", command=self._reset).pack(fill="x", pady=2)
         self.progress = ttk.Progressbar(cf, mode="determinate", style="Horizontal.TProgressbar")
         self.progress.pack(fill="x", pady=(8,0))
         self.prog_lbl = ttk.Label(cf, text="", foreground=DIM); self.prog_lbl.pack(anchor="w")
@@ -198,12 +208,12 @@ class PECDashboard:
     def _build_charts(self):
         cf = ttk.Frame(self.root); cf.pack(fill="both", expand=True, padx=12)
         plt.style.use("dark_background")
-        self.fig = Figure(figsize=(14, 5), dpi=85, facecolor=BG)
+        self.fig = Figure(figsize=(16, 6.5), dpi=100, facecolor=BG)
         self.fig.subplots_adjust(hspace=0.45, wspace=0.3, left=0.05, right=0.97, top=0.92, bottom=0.12)
         self.axes = [self.fig.add_subplot(1, 4, i+1) for i in range(4)]
         titles = ["Hit Rate Over Time", "Final Comparison", "Cache Utilisation", "ML Training"]
         for ax, t in zip(self.axes, titles):
-            ax.set_title(t, fontsize=9, color=DIM); ax.tick_params(labelsize=7)
+            ax.set_title(t, fontsize=12, color=DIM); ax.tick_params(labelsize=9)
             ax.set_facecolor(SURFACE)
         self.chart_canvas = FigureCanvasTkAgg(self.fig, cf)
         self.chart_canvas.get_tk_widget().pack(fill="both", expand=True)
@@ -221,7 +231,7 @@ class PECDashboard:
     def _build_log(self, parent):
         lf = ttk.LabelFrame(parent, text="  Event Log  ", padding=6)
         lf.pack(side="right", fill="both", expand=True, padx=(4,0))
-        self.log_text = tk.Text(lf, bg=SURFACE, fg=TEXT, font=("Consolas", 9), wrap="word",
+        self.log_text = tk.Text(lf, bg=SURFACE, fg=TEXT, font=("Consolas", 11), wrap="word",
                                 height=5, insertbackground=TEXT, highlightthickness=0, bd=0)
         sb = ttk.Scrollbar(lf, command=self.log_text.yview); self.log_text.config(yscrollcommand=sb.set)
         sb.pack(side="right", fill="y"); self.log_text.pack(fill="both", expand=True)
@@ -238,7 +248,7 @@ class PECDashboard:
                 self.log_text.see("end")
         except queue.Empty:
             pass
-        self.root.after(100, self._poll_log)
+        self.root.after(80, self._poll_log)
 
     def _run(self):
         pols = [p for p, v in self.pol_vars.items() if v.get()]
@@ -248,7 +258,7 @@ class PECDashboard:
         if not trace.exists():
             messagebox.showerror("Missing Trace", f"File not found:\n{trace}"); return
         self.run_btn.config(state="disabled"); self.stop_btn.config(state="normal")
-        self.status_lbl.config(text="\u25cf Running...", foreground=ACCENT)
+        self.status_lbl.config(text="* Running...", foreground=ACCENT)
         self.stop_event.clear()
         self.progress["value"] = 0
         cfg = SimulationConfig(
@@ -258,7 +268,10 @@ class PECDashboard:
             policies_to_compare=pols,
         )
         self.log_text.delete("1.0", "end")
-        self.log_queue.put(f"Starting simulation: {len(pols)} policies, trace={trace.name}")
+        self.log_queue.put(
+            f"Starting simulation: {len(pols)} policies, trace={trace.name}, "
+            f"cache={self.cache_var.get()}MB, history={self.hist_var.get()}"
+        )
         self._n_policies = len(pols); self._pol_idx = 0
         t = threading.Thread(target=self._worker, args=(cfg,), daemon=True)
         t.start()
@@ -282,14 +295,14 @@ class PECDashboard:
         self.prog_lbl.config(text=f"{name}: {idx:,}/{total:,}")
 
     def _on_error(self, msg):
-        self.status_lbl.config(text="\u25cf Error", foreground="#f87171")
+        self.status_lbl.config(text="* Error", foreground="#f87171")
         self.run_btn.config(state="normal"); self.stop_btn.config(state="disabled")
         messagebox.showerror("Simulation Error", msg)
 
     def _on_done(self, results: dict[str, MetricsReporter]):
         self.results = results
         self.progress["value"] = 100
-        self.status_lbl.config(text="\u25cf Done", foreground=ACCENT)
+        self.status_lbl.config(text="* Done", foreground=ACCENT)
         self.run_btn.config(state="normal"); self.stop_btn.config(state="disabled")
         stopped = self.stop_event.is_set()
         self.log_queue.put("Simulation " + ("stopped by user." if stopped else "complete."))
@@ -305,13 +318,13 @@ class PECDashboard:
         self.stop_event.set()
         self.results = {}
         for v, sub in self.kpi_labels.values():
-            v.config(text="—"); sub.config(text="Hits: — · Misses: —")
+            v.config(text="--"); sub.config(text="Hits: -- | Misses: --")
         for ax in self.axes: ax.clear()
         self.chart_canvas.draw()
         for r in self.tree.get_children(): self.tree.delete(r)
         self.log_text.delete("1.0", "end")
         self.progress["value"] = 0; self.prog_lbl.config(text="")
-        self.status_lbl.config(text="\u25cf Idle", foreground=DIM)
+        self.status_lbl.config(text="* Idle", foreground=DIM)
         self.run_btn.config(state="normal"); self.stop_btn.config(state="disabled")
 
     def _update_kpis(self):
@@ -322,7 +335,7 @@ class PECDashboard:
             if not snaps: continue
             last = snaps[-1]
             v_lbl.config(text=f"{last.cumulative_hit_rate*100:.2f}%")
-            sub_lbl.config(text=f"Hits: {last.cumulative_hits:,} \u00b7 Misses: {last.cumulative_misses:,}")
+            sub_lbl.config(text=f"Hits: {last.cumulative_hits:,} | Misses: {last.cumulative_misses:,}")
 
     def _update_charts(self):
         for ax in self.axes: ax.clear()
@@ -334,39 +347,39 @@ class PECDashboard:
             step = max(1, len(snaps)//500)
             xs = [s.request_idx for s in snaps[::step]]
             ys = [s.windowed_hit_rate*100 for s in snaps[::step]]
-            ax0.plot(xs, ys, label=name, color=COLORS.get(name, "#888"), linewidth=1.2)
-        ax0.set_title("Hit Rate Over Time", fontsize=9, color=DIM)
-        ax0.set_xlabel("Request", fontsize=7); ax0.set_ylabel("%", fontsize=7)
-        ax0.legend(fontsize=6, loc="lower right"); ax0.set_ylim(0, 100)
+            ax0.plot(xs, ys, label=name, color=COLORS.get(name, "#888"), linewidth=1.8)
+        ax0.set_title("Hit Rate Over Time", fontsize=12, color=DIM)
+        ax0.set_xlabel("Request", fontsize=9); ax0.set_ylabel("%", fontsize=9)
+        ax0.legend(fontsize=8, loc="lower right"); ax0.set_ylim(0, 100)
         # Chart 2: Bar comparison
         ax1 = self.axes[1]
         names = list(self.results.keys())
         rates = [r.final_hit_rate*100 for r in self.results.values()]
         cols = [COLORS.get(n, "#888") for n in names]
         bars = ax1.bar(names, rates, color=cols, edgecolor="white", linewidth=0.5)
-        for b, r in zip(bars, rates): ax1.text(b.get_x()+b.get_width()/2, r+0.5, f"{r:.1f}%", ha="center", fontsize=7, color=TEXT)
-        ax1.set_title("Final Hit Rate", fontsize=9, color=DIM); ax1.set_ylabel("%", fontsize=7)
-        ax1.tick_params(axis='x', labelsize=7)
+        for b, r in zip(bars, rates): ax1.text(b.get_x()+b.get_width()/2, r+0.5, f"{r:.1f}%", ha="center", fontsize=9, color=TEXT)
+        ax1.set_title("Final Hit Rate", fontsize=12, color=DIM); ax1.set_ylabel("%", fontsize=9)
+        ax1.tick_params(axis='x', labelsize=9)
         # Chart 3: Cache Utilisation
         ax2 = self.axes[2]
         for name, rep in self.results.items():
             snaps = rep.snapshots; step = max(1, len(snaps)//500)
             ax2.plot([s.request_idx for s in snaps[::step]], [s.cache_utilisation*100 for s in snaps[::step]],
-                     label=name, color=COLORS.get(name, "#888"), linewidth=1.2)
-        ax2.set_title("Cache Utilisation", fontsize=9, color=DIM)
-        ax2.set_xlabel("Request", fontsize=7); ax2.set_ylabel("%", fontsize=7)
-        ax2.legend(fontsize=6); ax2.set_ylim(0, 105)
+                     label=name, color=COLORS.get(name, "#888"), linewidth=1.8)
+        ax2.set_title("Cache Utilisation", fontsize=12, color=DIM)
+        ax2.set_xlabel("Request", fontsize=9); ax2.set_ylabel("%", fontsize=9)
+        ax2.legend(fontsize=8); ax2.set_ylim(0, 105)
         # Chart 4: ML Training
         ax3 = self.axes[3]
         ml = self.results.get("ML-Driven")
         if ml and ml.snapshots:
             snaps = ml.snapshots; step = max(1, len(snaps)//500)
             ax3.plot([s.request_idx for s in snaps[::step]], [s.ml_training_steps for s in snaps[::step]],
-                     color=ACCENT, linewidth=1.5)
-            ax3.set_title("ML Training Steps", fontsize=9, color=DIM)
-            ax3.set_xlabel("Request", fontsize=7); ax3.set_ylabel("Steps", fontsize=7)
+                     color=ACCENT, linewidth=2.0)
+            ax3.set_title("ML Training Steps", fontsize=12, color=DIM)
+            ax3.set_xlabel("Request", fontsize=9); ax3.set_ylabel("Steps", fontsize=9)
         else:
-            ax3.set_title("ML Training (N/A)", fontsize=9, color=DIM)
+            ax3.set_title("ML Training (N/A)", fontsize=12, color=DIM)
             ax3.text(0.5, 0.5, "No ML policy", transform=ax3.transAxes, ha="center", color=DIM)
         self.chart_canvas.draw()
 
@@ -379,10 +392,10 @@ class PECDashboard:
             hr = rep.final_hit_rate; snaps = rep.snapshots
             if not snaps: continue
             last = snaps[-1]; h = last.cumulative_hits; m = last.cumulative_misses
-            vs = "—" if name == "LRU" else f"{((hr-lru_hr)/lru_hr*100) if lru_hr else 0:+.1f}%"
+            vs = "n/a" if name == "LRU" else f"{((hr-lru_hr)/lru_hr*100) if lru_hr else 0:+.1f}%"
             tag = "winner" if abs(hr - best) < 1e-6 else ""
             self.tree.insert("", "end", values=(
-                ("\u2605 " if tag else "") + name, f"{h+m:,}", f"{h:,}", f"{m:,}",
+                ("* " if tag else "") + name, f"{h+m:,}", f"{h:,}", f"{m:,}",
                 f"{hr*100:.2f}%", f"{(1-hr)*100:.2f}%", vs))
 
 
